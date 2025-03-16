@@ -1,10 +1,14 @@
 # Natural Language Translator 
 
-A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers, writers, and language enthusiasts working with multilingual code or content.
+Write computer programs in your native language. 
+A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers and language enthusiasts working with multilingual code or content. View and edit your programs in your own language. 
+
+## CURRENT DEFAULT LANGUAGES: 
+  German, Spanish, French, Italian, Hindi, Japanese, Korean, Dutch, Portuguese, Polish, Russian & Mandarin Chinese
 
 ## Features
 
-- **Toggle Translation**:  Switch between English and a target language with a single command.
+- **Toggle Translation**:  Switch between English and a target language.
 - **Dynamic Dictionary Management**: Add or remove terms from your language dictionary directly within the editor.
 - **Compound Word Support**: Automatically detects and translates compound terms (e.g., "camelCase" or "PascalCase").
 - **Hover Information**: Hover over words to see their translations or original meanings.
@@ -20,14 +24,14 @@ A powerful Visual Studio Code extension that enables real-time translation of te
 ## Usage
 
 ### Commands
-- **`Toggle Translation`**: CTRL+SHIFT+T `vscode-translator.toggleTranslation`  
+- **`Toggle Translation`**: CTRL+SHIFT+t `vscode-translator.toggleTranslation`  
   Switches the current document between English and the selected target language.
-- **`Add to Dictionary`**: CTRL+SHIFT+U `vscode-translator.addToDictionary`  
+- **`Add to Dictionary`**: CTRL+SHIFT+u `vscode-translator.addToDictionary`  
   Highlight a word, run the command, and enter its English meaning to add it to the dictionary.
 - **`Remove from Dictionary`**: CTRL+SHIFT+i `vscode-translator.removeFromDictionary`  
   Highlight a word, select a meaning to remove, and update the dictionary.
 - **`Select Dictionary`**: `vscode-translator.selectDictionary`  
-  Choose a target language from the status bar dropdown.
+  Choose a target language from the status bar dropdown. (bottom left of vscode)
 
 ### Status Bar
 - **Translator Status**: Displays "Translator Enabled" or "Translator Disabled" based on the toggle state.
