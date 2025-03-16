@@ -3,6 +3,8 @@
 Program in your native language. 
 A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers and language enthusiasts working with multilingual code or content. View and edit your programs in your own language. 
 
+## ONLY TRANSLATE 1 DOCUMENT AT A TIME! (In version 0.0.1)
+
 ## INCLUDED LANGUAGES: 
   German, Spanish, French, Italian, Hindi, Japanese, Korean, Dutch, Portuguese, Polish, Russian & Mandarin Chinese
 
