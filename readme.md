@@ -3,7 +3,7 @@
 Program in your native language. 
 A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers and language enthusiasts working with multilingual code or content. View and edit your programs in your own language. 
 
-## CURRENT DEFAULT LANGUAGES: 
+## INCLUDED LANGUAGES: 
   German, Spanish, French, Italian, Hindi, Japanese, Korean, Dutch, Portuguese, Polish, Russian & Mandarin Chinese
 
 ## Features
@@ -48,3 +48,12 @@ A powerful Visual Studio Code extension that enables real-time translation of te
      "targetTerm": ["englishMeaning1", "englishMeaning2"],
      "anotherTerm": ["meaning"]
    }
+
+## Natural Scripts
+These are the currently supported natural scripts:
+Latin, Cyrillic, Chinese, Devanegari, Korean & Japanese
+
+## CREATE YOUR OWN DICTIONARIES 
+- Simply navigate to %USERPROFILE%\.vscode\extensions
+  find futuretoons.natural-language-translator-{version number} 
+- Then go to out\languages\languages\.. Here you can make new JSON dictionaries (for any of the supported natural scripts). 
