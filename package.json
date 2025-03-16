@@ -1,0 +1,100 @@
+{
+  "name": "Natural-Language-Translator",
+  "publisher": "futuretoons",
+  "version": "0.0.1",
+  "license": "MIT",
+  "repository": {"url": "https://github.com/futuretoons/Natural-Language-Translator.git"},
+  "engines": {
+    "vscode": "^1.98.2"
+  },
+  "activationEvents": [
+    "onCommand:vscode-translator.toggleTranslation",
+    "onCommand:vscode-translator.selectDictionary",
+    "onCommand:vscode-translator.addToDictionary",
+    "onCommand:vscode-translator.removeFromDictionary",
+    "onCommand:vscode-translator.toggleRTL", 
+    "onLanguage:plaintext"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-translator.toggleTranslation",
+        "title": "Toggle Translation"
+      },
+      {
+        "command": "vscode-translator.selectDictionary",
+        "title": "Select Dictionary"
+      },
+      {
+        "command": "vscode-translator.addToDictionary",
+        "title": "Add to Dictionary"
+      },
+      {
+        "command": "vscode-translator.removeFromDictionary",
+        "title": "Remove from Dictionary"
+      },
+      {
+        "command": "vscode-translator.toggleRTL",
+        "title": "Toggle RTL" 
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vscode-translator.toggleTranslation",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t"
+      },
+      {
+        "command": "vscode-translator.addToDictionary",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u"
+      },
+      {
+        "command": "vscode-translator.removeFromDictionary",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i"
+      },
+      {
+        "command": "vscode-translator.toggleRTL",
+        "key": "ctrl+shift+r", 
+        "mac": "cmd+shift+r"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "VSCode Translator",
+      "properties": {
+        "vscode-translator.extensionPath": {
+          "type": "string",
+          "default": "${workspaceFolder}",
+          "description": "Path to the extension's root directory."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w",
+    "postinstall": "node ./node_modules/vscode/bin/install",
+    "test": "npm run compile && node ./out/test/runTest.js",
+    "build": "tsc -p ./ && echo TSC done && copyfiles -u 1 -V src/languages/* out/languages && echo Copyfiles done"
+  },
+  "devDependencies": {
+    "@types/glob": "^7.2.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^18.11.18",
+    "@types/vscode": "^1.70.0",
+    "copyfiles": "^2.4.1",
+    "eslint": "^8.11.0",
+    "glob": "^8.1.0",
+    "mocha": "^10.2.0",
+    "typescript": "^4.9.4",
+    "vscode-test": "^1.6.1"
+  },
+  "files": [
+    "out/**/*",
+    "src/languages/**/*"
+  ]
+}
