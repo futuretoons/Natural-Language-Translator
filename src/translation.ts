@@ -298,7 +298,137 @@ export async function translateToOriginal(
 
 }
 
-function splitCompound(term: string): string[] {
-    return term.replace(/([a-z])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
-    
+
+/**
+ * Split a compound word based on capital letters in latin script..
+ */
+export function splitCompound(term: string): string[] {
+    const parts = term.match(/[A-Z][a-z]*|[a-z]+/g) || [term];
+    return parts.filter(Boolean);
+}
+
+/**
+ * Splits a compound word based on script transitions and dictionary terms for non Latin languages..
+ */
+export function splitNonLatinCompound(term: string): string[] {
+    const parts: string[] = [];
+    let currentPart = '';
+    let lastScript = detectScript(term[0]);
+
+    for (let i = 0; i < term.length; i++) {
+        const char = term[i];
+        const currentScript = detectScript(char);
+
+        if (i === 0) {
+            currentPart = char;
+            continue;
+        }
+
+        if (currentScript !== lastScript) {
+            if (lastScript === 'logographic') {
+                parts.push(...segmentLogographic(currentPart));
+            } else if (lastScript === 'devanagari') {
+                parts.push(...segmentDevanagari(currentPart));
+            } else if (lastScript === 'cyrillic') {
+                parts.push(...segmentCyrillic(currentPart));
+            } else if (lastScript === 'latin') {
+                parts.push(...splitCompound(currentPart)); // Use splitCompound for Latin with diacritics
+            }
+            currentPart = char;
+            lastScript = currentScript;
+        } else {
+            currentPart += char;
+        }
+    }
+
+    // Handle the last part
+    if (currentPart) {
+        if (lastScript === 'logographic') {
+            parts.push(...segmentLogographic(currentPart));
+        } else if (lastScript === 'devanagari') {
+            parts.push(...segmentDevanagari(currentPart));
+        } else if (lastScript === 'cyrillic') {
+            parts.push(...segmentCyrillic(currentPart));
+        } else if (lastScript === 'latin') {
+            parts.push(...splitCompound(currentPart));
+        }
+    }
+
+    return parts.filter(Boolean);
+}
+
+function segmentLogographic(text: string): string[] {
+    const segments: string[] = [];
+    let pos = 0;
+
+    while (pos < text.length) {
+        let longestMatch = '';
+        for (let len = Math.min(text.length - pos, 4); len > 0; len--) { // Max 4 chars for Chinese
+            const substring = text.substring(pos, pos + len);
+            if (currentDictionary[substring]) {
+                longestMatch = substring;
+                break;
+            }
+        }
+        if (longestMatch) {
+            segments.push(longestMatch);
+            pos += longestMatch.length;
+        } else {
+            segments.push(text[pos]);
+            pos++;
+        }
+    }
+
+    return segments;
+}
+
+function segmentDevanagari(text: string): string[] {
+    const segments: string[] = [];
+    let pos = 0;
+
+    while (pos < text.length) {
+        let longestMatch = '';
+        for (let len = text.length - pos; len > 0; len--) {
+            const substring = text.substring(pos, pos + len);
+            if (currentDictionary[substring]) {
+                longestMatch = substring;
+                break;
+            }
+        }
+        if (longestMatch) {
+            segments.push(longestMatch);
+            pos += longestMatch.length;
+        } else {
+            segments.push(text[pos]);
+            pos++;
+        }
+    }
+
+    return segments;
+}
+
+
+function segmentCyrillic(text: string): string[] {
+    const segments: string[] = [];
+    let pos = 0;
+
+    while (pos < text.length) {
+        let longestMatch = '';
+        for (let len = text.length - pos; len > 0; len--) {
+            const substring = text.substring(pos, pos + len);
+            if (currentDictionary[substring]) {
+                longestMatch = substring;
+                break;
+            }
+        }
+        if (longestMatch) {
+            segments.push(longestMatch);
+            pos += longestMatch.length;
+        } else {
+            segments.push(text[pos]);
+            pos++;
+        }
+    }
+
+    return segments;
 }

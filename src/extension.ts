@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { toggleTranslation, getOriginalTerms, translateToOriginal, detectScript } from './translation';
+import { toggleTranslation, getOriginalTerms, translateToOriginal, detectScript, splitNonLatinCompound } from './translation';
 import { MappingManager } from './mappings';
 import { LanguageSelector } from './ui';
 import { log } from './utils';
@@ -111,7 +111,7 @@ export function activate(context: vscode.ExtensionContext) {
             const increment = 100 / totalSteps;
             let currentStep = 0;
 
-            // Fake progress updates
+            // progress updates
             const updateProgress = () => {
                 currentStep += 1;
                 progress.report({ increment, message: `${Math.round(currentStep * increment)}%` });
@@ -327,117 +327,60 @@ export function activate(context: vscode.ExtensionContext) {
         const dictPath = path.join(__dirname, 'languages', 'languages', `${currentLanguage}.json`);
         const dict = JSON.parse(fs.readFileSync(dictPath, 'utf8'));
     
-        let pos = 0;
         let compoundParts: string[] = [];
         let compoundTranslated = '';
         let compoundOriginal = '';
         let compoundStart = wordStartOffset;
     
-        while (pos < currentWord.length) 
-            {
-            let foundMatch = false;
-            for (let len = currentWord.length - pos; len > 0; len--) {
-                const substring = currentWord.substring(pos, pos + len);
-                if (currentDictionary[substring]) {
-                    const substringStartOffset = wordStartOffset + pos;
-                    const textBefore = currentText.substring(0, substringStartOffset);
-                    const occurrencesBefore = (textBefore.match(new RegExp(substring, 'g')) || []).length + 1;
-                    const identifier = `${substring}_${occurrencesBefore}`;
+        log(`Processing word '${currentWord}' at offset ${wordStartOffset}, cursorOffset=${cursorOffset}, script=${script}`);
     
-                    // Checks if this term / substring is already mapped at this exact position
-                    const isAlreadyMapped = allTerms[identifier] && mappingManager.getPosition(identifier) === substringStartOffset;
-    
-                    if (!isAlreadyMapped) 
-                        {
-                        const options = getOriginalTerms(substring);
-                        let selected: string | undefined;
-                        if (options.length > 1) 
-                            {
-                            log(`Ambiguous term '${substring}' detected, showing popup`);
-                            selected = await vscode.window.showQuickPick(options, {
-                                placeHolder: `Select meaning for "${substring}"`,
-                                ignoreFocusOut: true,
-                            });
-                        } else if (options.length === 1) 
-                            {
-                            selected = options[0];
-                            log(`Single option '${selected}' selected for '${substring}'`);
-                        }
-    
-                        if (selected)
-                             {
-                            mappingManager.addInsertionPictographic(selected, substring, substringStartOffset, currentText);
-                            log(`Mapped '${substring}' to '${selected}' with identifier '${identifier}'`);
-                            compoundTranslated += substring;
-                            compoundOriginal += selected;
-                            compoundParts.push(identifier);
-                            pos += substring.length;
-                            foundMatch = true;
-                            break;
-                        }
-                    } else {
-                        // Reuse existing mappings for compounds. prevents redundancy for compounds. 
-                        const existingMeaning = allTerms[identifier];
-                        log(`Reusing existing mapping '${existingMeaning}' for '${substring}' at position ${substringStartOffset}`);
-                        compoundTranslated += substring;
-                        compoundOriginal += existingMeaning;
-                        compoundParts.push(identifier);
-                        pos += substring.length;
-                        foundMatch = true;
-                        break;
-                    }
-                }
-            }
-            if (!foundMatch) 
-                {
-                // End of compound term
-                // No match found, move to next character and stop the compound formation..
-                pos++;
-                break;
-            }
-
+        let parts: string[];
+        if (script === 'latin' && /[\p{Lu}]/u.test(currentWord)) {
+            parts = currentWord.match(/[\p{Lu}][\p{Ll}]*|[\p{Ll}]+/gu) || [currentWord];
+            log(`Latin split '${currentWord}' into parts: ${JSON.stringify(parts)}`);
+        } else if (script === 'logographic' || script === 'devanagari' || script === 'cyrillic') {
+            parts = splitNonLatinCompound(currentWord);
+            log(`Non-Latin split '${currentWord}' into parts: ${JSON.stringify(parts)}`);
+        } else {
+            parts = splitNonLatinCompound(currentWord);
+            log(`Mixed split '${currentWord}' into parts: ${JSON.stringify(parts)}`);
         }
     
-        // Check before & after the current word for additional compound parts
+        for (const substring of parts) {
+            const substringStartOffset = wordStartOffset + compoundTranslated.length;
+            const substringScript = detectScript(substring);
+            const lookupSubstring = substringScript === 'latin' && substring.length > 1
+                ? substring.charAt(0).toLowerCase() + substring.slice(1)
+                : substring;
+    
+            const originalPart = await processPart(substring, lookupSubstring, substringStartOffset, currentText, currentDictionary, mappingManager, compoundParts, compoundTranslated, compoundOriginal, allTerms);
+            compoundTranslated += substring;
+            compoundOriginal += originalPart;
+        }
+    
+        // Check before & after for compound extension
         const textBeforeWord = currentText.substring(0, wordStartOffset);
         const prevMatch = textBeforeWord.match(/[^\s().]+$/);
-        if (prevMatch) 
-            {
+        if (prevMatch) {
             const prevWord = prevMatch[0];
             const prevStart = wordStartOffset - prevWord.length;
             const prevCompound = Object.values(allCompounds).find(c => c.translated === prevWord && c.position === prevStart);
-            if (prevCompound) 
-                {
+            if (prevCompound) {
                 compoundTranslated = prevCompound.translated + (script === 'logographic' ? '' : '') + compoundTranslated;
                 compoundOriginal = prevCompound.original + (script === 'logographic' ? '' : '') + compoundOriginal;
                 compoundParts = [...prevCompound.parts, ...compoundParts];
                 compoundStart = prevCompound.position;
                 const oldCompoundId = Object.keys(allCompounds).find(id => allCompounds[id] === prevCompound);
-                if (oldCompoundId) 
-                    {
+                if (oldCompoundId) {
                     mappingManager.removeCompound(oldCompoundId);
                     log(`Removed old compound '${oldCompoundId}' to extend it`);
-
                 }
-            } else {
-                const prevOccurrences = (textBeforeWord.substring(0, prevStart).match(new RegExp(prevWord, 'g')) || []).length + 1;
-                const prevId = `${prevWord}_${prevOccurrences}`;
-                const originalBefore = allTerms[prevId];
-                if (originalBefore && dict[prevWord]) {
-                    compoundTranslated = prevWord + (script === 'logographic' ? '' : '') + compoundTranslated;
-                    compoundOriginal = originalBefore + (script === 'logographic' ? '' : '') + compoundOriginal;
-                    compoundParts = [prevId, ...compoundParts];
-                    compoundStart = prevStart;
-                }
-
             }
-
         }
     
         const textAfterWord = currentText.substring(wordStartOffset + currentWord.length);
         const nextMatch = textAfterWord.match(/^[^\s().]+/);
-        if (nextMatch) 
-            {
+        if (nextMatch) {
             const nextWord = nextMatch[0];
             const nextOccurrences = (currentText.substring(0, wordStartOffset).match(new RegExp(nextWord, 'g')) || []).length + 1;
             const nextId = `${nextWord}_${nextOccurrences}`;
@@ -447,152 +390,183 @@ export function activate(context: vscode.ExtensionContext) {
                 compoundOriginal += (script === 'logographic' ? '' : '') + originalAfter;
                 compoundParts.push(nextId);
             }
-
         }
     
-        if (compoundParts.length > 1) 
-            {
+        if (compoundParts.length > 1) {
             const compoundId = mappingManager.addCompound(compoundOriginal, compoundTranslated, compoundParts, compoundStart);
             log(`Added/Updated compound: '${compoundTranslated}' -> '${compoundOriginal}' (${compoundId}) with parts ${JSON.stringify(compoundParts)}`);
-            if (!dict[compoundTranslated]) 
-                {
+            if (!dict[compoundTranslated]) {
                 dict[compoundTranslated] = [compoundOriginal];
                 fs.writeFileSync(dictPath, JSON.stringify(dict, null, 2), 'utf8');
                 log(`Added compound '${compoundTranslated}' -> '${compoundOriginal}' to dictionary`);
             }
-
+        } else {
+            log(`No compound formed for '${currentWord}'`);
         }
-
     }
-
-    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event: vscode.TextDocumentChangeEvent) => {
-        const isTargetLang = context.workspaceState.get('isTargetLanguage', false);
-        log(`Text document changed: isTargetLanguage=${isTargetLang}, isProcessingEdit=${isProcessingEdit}`);
-        if (isProcessingEdit) return;
     
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document !== event.document) 
-            {
-            log('Skipping: No active editor or document mismatch');
-            return;
+    /**
+ * Processe a single part of a compound word & updates map if necessary..
+ * @returns The original term used for the substring (either newly mapped or existing).
+ */
+async function processPart(
+    substring: string,
+    lookupSubstring: string,
+    substringStartOffset: number,
+    currentText: string,
+    currentDictionary: { [key: string]: string[] },
+    mappingManager: MappingManager,
+    compoundParts: string[],
+    compoundTranslated: string,
+    compoundOriginal: string,
+    allTerms: { [key: string]: string }
+): Promise<string> {
+    const textBefore = currentText.substring(0, substringStartOffset);
+    const occurrencesBefore = (textBefore.match(new RegExp(substring, 'g')) || []).length + 1;
+    const identifier = `${substring}_${occurrencesBefore}`;
+    const isAlreadyMapped = allTerms[identifier] && mappingManager.getPosition(identifier) === substringStartOffset;
+
+    if (!isAlreadyMapped) {
+        let options = currentDictionary[substring] ? getOriginalTerms(substring) : [];
+        if (options.length === 0) {
+            const lowerSubstring = substring.toLowerCase();
+            options = currentDictionary[lowerSubstring] ? getOriginalTerms(lowerSubstring) : [];
         }
-        if (lastDocumentText === null) {
-            lastDocumentText = editor.document.getText();
-            log(`Initialized lastDocumentText on first change: '${lastDocumentText}'`);
 
+        let selected: string | undefined;
+        if (options.length > 1) {
+            log(`Ambiguous term '${substring}' detected, showing popup`);
+            selected = await vscode.window.showQuickPick(options, {
+                placeHolder: `Select meaning for "${substring}"`,
+                ignoreFocusOut: true,
+            });
+        } else if (options.length === 1) {
+            selected = options[0];
+            log(`Single option '${selected}' selected for '${substring}'`);
         }
-    
-        isProcessingEdit = true;
-        const currentText = editor.document.getText();
-        const currentLanguage = languageSelector.getCurrentLanguage();
-        const script = detectScript(currentText);
-        const currentDictionary = require('./translation').currentDictionary;
-    
-        for (const change of event.contentChanges) {
-            const startOffset = editor.document.offsetAt(change.range.start);
-            const endOffset = editor.document.offsetAt(change.range.end);
-    
-            if (!isTargetLang)
-                 {
-                log('Skipping change processing: Not in target language mode');
-                continue;
-            }
-    
-            // Determine position to check after insertion or at a deletion point
-            const checkOffset = change.text ? startOffset + change.text.length : startOffset;
-            const wordRange = editor.document.getWordRangeAtPosition(
-                editor.document.positionAt(checkOffset),
-                require('./translation').getTokenRegex(script)
-            );
-    
-            const currentWord = wordRange ? editor.document.getText(wordRange) : '';
-            const wordStartOffset = wordRange ? editor.document.offsetAt(wordRange.start) : startOffset;
-            log(`Processing change at offset ${checkOffset}, current word: '${currentWord}', word start offset: ${wordStartOffset}`);
-    
-            if (change.text === '' && change.rangeLength > 0) 
-                {
-                // Deletion occurred
-                const actualDeletedText = lastDocumentText.substring(startOffset, endOffset);
-                log(`Deletion detected: text='${actualDeletedText}', startOffset=${startOffset}, endOffset=${endOffset}`);
-    
-                const windowStart = Math.max(0, startOffset - 25);
-                const windowEnd = Math.min(currentText.length, startOffset + 25);
-                preDeletionWindow = currentText.substring(windowStart, windowEnd);
-                deletionContext = preDeletionWindow;
-                deletedTextBuffer += actualDeletedText;
-                log(`Deletion context updated: '${deletionContext}', deletedTextBuffer: '${deletedTextBuffer}'`);
-    
-                if (currentWord) 
-                    {
-                    // Handle compounds or single words after deletion
-                    await handleCompoundDetection(currentWord, wordStartOffset, checkOffset, currentText, currentLanguage, script, currentDictionary, mappingManager);
-                } else 
-                {
-                    // Word deleted, remove mappings 
-                    const textBeforeDeletion = lastDocumentText.substring(0, startOffset);
-                    const allTerms = mappingManager.getAllTerms();
-                    for (const [term, meanings] of Object.entries(currentDictionary)) {
-                        const termStart = startOffset - term.length;
-                        if (termStart >= 0 && lastDocumentText.substring(termStart, startOffset + actualDeletedText.length).includes(term)) {
-                            const occurrencesBefore = (textBeforeDeletion.match(new RegExp(term, 'g')) || []).length + 1;
-                            const identifier = `${term}_${occurrencesBefore}`;
-                            if (allTerms[identifier]) {
-                                mappingManager.removeTermPictographic(identifier, termStart);
-                                log(`Removed mapping '${identifier}' for '${term}' due to deletion`);
-                                lastDeletedIdentifier = identifier;
-                                break;
 
-
-                            }
-                        }
-
-                    }
-
-                }
-            } else if (change.text) {
-                // Insertion occurred
-                log(`Insertion detected: text='${change.text}', current word: '${currentWord}'`);
-    
-                const windowStart = Math.max(0, startOffset - 25);
-                const windowEnd = Math.min(currentText.length, startOffset + change.text.length + 25);
-                preDeletionWindow = currentText.substring(windowStart, windowEnd);
-                lastCursorOffset = startOffset + change.text.length;
-                deletionContext = '';
-    
-                if (currentWord) 
-                    {
-                    // Handle compounds or single words upon insertion
-                    await handleCompoundDetection(currentWord, wordStartOffset, checkOffset, currentText, currentLanguage, script, currentDictionary, mappingManager);
-                }
-    
-                // Update buffers
-                if (/[\s().]/.test(change.text)) 
-                    {
-                    insertionBuffer = '';
-                    bufferStartOffset = null;
-                    lastDeletedIdentifier = null;
-                    deletedTextBuffer = '';
-                    log('Delimiter detected, buffers reset');
-                } else {
-                    insertionBuffer = currentWord;
-                    bufferStartOffset = wordRange ? wordRange.start.character : startOffset;
-                    
-                }
-            }
-
+        if (selected) {
+            mappingManager.addInsertionPictographic(selected, substring, substringStartOffset, currentText);
+            log(`Mapped '${substring}' to '${selected}' with identifier '${identifier}'`);
+            compoundParts.push(identifier);
+            return selected;
+        } else {
+            mappingManager.addInsertionPictographic(substring, substring, substringStartOffset, currentText);
+            log(`Mapped untranslated '${substring}' to itself with identifier '${identifier}'`);
+            compoundParts.push(identifier);
+            return substring;
         }
+    } else {
+        const existingMeaning = allTerms[identifier];
+        log(`Reusing existing mapping '${existingMeaning}' for '${substring}' at position ${substringStartOffset}`);
+        compoundParts.push(identifier);
+        return existingMeaning;
+    }
+}
+
     
-        isProcessingEdit = false;
-        lastDocumentText = currentText;
-        log(`Document updated, post-update text='${lastDocumentText}'`);
-    }));
+
+
+context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async (event: vscode.TextDocumentChangeEvent) => {
+    const isTargetLang = context.workspaceState.get('isTargetLanguage', false);
+    log(`Text document changed: isTargetLanguage=${isTargetLang}, isProcessingEdit=${isProcessingEdit}`);
+    if (isProcessingEdit) return;
 
     const editor = vscode.window.activeTextEditor;
-    if (editor) 
-        {
-        lastDocumentText = editor.document.getText();
-        log(`Initialized lastDocumentText='${lastDocumentText}'`);
+    if (!editor || editor.document !== event.document) {
+        log('Skipping: No active editor or document mismatch');
+        return;
     }
+    if (lastDocumentText === null) {
+        lastDocumentText = editor.document.getText();
+        log(`Initialized lastDocumentText on first change: '${lastDocumentText}'`);
+    }
+
+    isProcessingEdit = true;
+    const currentText = editor.document.getText();
+    const currentLanguage = languageSelector.getCurrentLanguage();
+    const script = detectScript(currentText);
+    const currentDictionary = require('./translation').currentDictionary;
+
+    for (const change of event.contentChanges) {
+        const startOffset = editor.document.offsetAt(change.range.start);
+        const endOffset = editor.document.offsetAt(change.range.end);
+
+        if (!isTargetLang) {
+            log('Skipping change processing: Not in target language mode');
+            continue;
+        }
+
+        const checkOffset = change.text ? startOffset + change.text.length : startOffset;
+        const wordRange = editor.document.getWordRangeAtPosition(
+            editor.document.positionAt(checkOffset),
+            /[\p{L}\p{M}\p{N}]+/u // Match only letters and numbers
+        );
+
+        const currentWord = wordRange ? editor.document.getText(wordRange) : '';
+        const wordStartOffset = wordRange ? editor.document.offsetAt(wordRange.start) : startOffset;
+        log(`Processing change at offset ${checkOffset}, current word: '${currentWord}', word start offset: ${wordStartOffset}`);
+
+        if (change.text === '' && change.rangeLength > 0) {
+            const actualDeletedText = lastDocumentText.substring(startOffset, endOffset);
+            log(`Deletion detected: text='${actualDeletedText}', startOffset=${startOffset}, endOffset=${endOffset}`);
+
+            const windowStart = Math.max(0, startOffset - 25);
+            const windowEnd = Math.min(currentText.length, startOffset + 25);
+            preDeletionWindow = currentText.substring(windowStart, windowEnd);
+            deletionContext = preDeletionWindow;
+            deletedTextBuffer += actualDeletedText;
+            log(`Deletion context updated: '${deletionContext}', deletedTextBuffer: '${deletedTextBuffer}'`);
+
+            if (currentWord) {
+                await handleCompoundDetection(currentWord, wordStartOffset, checkOffset, currentText, currentLanguage, script, currentDictionary, mappingManager);
+            } else {
+                const textBeforeDeletion = lastDocumentText.substring(0, startOffset);
+                const allTerms = mappingManager.getAllTerms();
+                for (const [term, _] of Object.entries(currentDictionary)) {
+                    const termStart = startOffset - term.length;
+                    if (termStart >= 0 && lastDocumentText.substring(termStart, startOffset + actualDeletedText.length).includes(term)) {
+                        const occurrencesBefore = (textBeforeDeletion.match(new RegExp(term, 'g')) || []).length + 1;
+                        const identifier = `${term}_${occurrencesBefore}`;
+                        if (allTerms[identifier]) {
+                            mappingManager.removeTermPictographic(identifier, termStart);
+                            log(`Removed mapping '${identifier}' for '${term}' due to deletion`);
+                            lastDeletedIdentifier = identifier;
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (change.text) {
+            log(`Insertion detected: text='${change.text}', current word: '${currentWord}'`);
+
+            const windowStart = Math.max(0, startOffset - 25);
+            const windowEnd = Math.min(currentText.length, startOffset + change.text.length + 25);
+            preDeletionWindow = currentText.substring(windowStart, windowEnd);
+            lastCursorOffset = startOffset + change.text.length;
+            deletionContext = '';
+
+            if (currentWord) {
+                await handleCompoundDetection(currentWord, wordStartOffset, checkOffset, currentText, currentLanguage, script, currentDictionary, mappingManager);
+            }
+
+            if (/[\s+$_) (*&^%$#@!}{]['";:.,></?\|-]+/.test(change.text)) { // Treat special chars as delimiters
+                insertionBuffer = '';
+                bufferStartOffset = null;
+                lastDeletedIdentifier = null;
+                deletedTextBuffer = '';
+                log('Delimiter detected (space or special char), buffers reset');
+            } else {
+                insertionBuffer = currentWord;
+                bufferStartOffset = wordRange ? editor.document.offsetAt(wordRange.start) : startOffset;
+            }
+        }
+    }
+
+    isProcessingEdit = false;
+    lastDocumentText = currentText;
+    log(`Document updated, post-update text='${lastDocumentText}'`);
+}));
 
     registerHoverProvider(context, {
         selectedLanguage: () => languageSelector.getCurrentLanguage(),
