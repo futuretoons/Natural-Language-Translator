@@ -4,8 +4,7 @@ import * as path from 'path';
 import { MappingManager } from './mappings';
 import { log } from './utils';
 
-export interface Dictionary 
-{
+export interface Dictionary {
     [key: string]: string[];
 }
 
@@ -15,92 +14,25 @@ export let lastTranslatedText: string | null = null;
 export let lastOriginalText: string | null = null;
 export let lastLanguage: string | null = null;
 
-const PROTECTED_KEYWORDS = new Set(['long', 'bool', 'const', 'char', 'int', 'void', 'for', 'if', 'true', 'false', 'break']);
-
-export function getTokenRegex(script: string): RegExp 
-{
-    return /[\p{L}\p{M}\p{N}]+|[^\s\p{L}\p{M}\p{N}]+|\s+/gu; // Unified for all scripts
+export function getTokenRegex(script: string): RegExp {
+    return /[\p{L}\p{M}\p{N}]+|[^\s\p{L}\p{M}\p{N}]+|\s+/gu;
 }
 
-export function detectScript(text: string): 'latin' | 'cyrillic' | 'devanagari' | 'logographic' 
-{
+export function detectScript(text: string): 'latin' | 'cyrillic' | 'devanagari' | 'logographic' {
     if (/[\u4E00-\u9FFF]/.test(text)) return 'logographic';
     if (/[\u0900-\u097F]/.test(text)) return 'devanagari';
     if (/[а-яА-ЯёЁ]/.test(text)) return 'cyrillic';
     return 'latin';
-
 }
 
-export async function toggleTranslation(
-    text: string,
-    language: string,
-    editor: vscode.TextEditor,
-    mappingManager: MappingManager,
-    context: vscode.ExtensionContext
-): Promise<void> 
-{
-    if (language !== 'en' && language !== lastLanguage) 
-        {
-        const dictionaryPath = path.join(context.extensionPath, 'out', 'languages', 'languages', `${language}.json`);
-        currentDictionary = JSON.parse(fs.readFileSync(dictionaryPath, 'utf8'));
-        lastDictionary = { ...currentDictionary };
-
-        lastLanguage = language;
-        mappingManager.clearMap();
-        log(`Loaded dictionary for ${language} and cleared map`);
+export function matchCase(source: string, target: string): string {
+    if (/^[A-Z]/.test(source) && /^[a-z]/.test(target)) {
+        return target.charAt(0).toUpperCase() + target.slice(1);
     }
-
-    let newText: string;
-    await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: `Translating to ${language === 'en' ? 'English' : language.toUpperCase()}...`,
-        cancellable: false
-    }, async (progress) => {
-        const tokens = text.match(getTokenRegex(detectScript(text))) || [];
-        const totalSteps = tokens.length;
-        let completedSteps = 0;
-
-        const updateProgress = () => {
-            completedSteps++;
-            const increment = (completedSteps / totalSteps) * 100;
-
-            progress.report({ message: `processing ${totalSteps} terms` });
-        };
-
-        if (language !== 'en')
-            {
-            newText = await translateToTarget(text, currentDictionary, mappingManager, context, language, updateProgress);
-            lastTranslatedText = newText;
-
-            lastOriginalText = text;
-        } else {
-            if (lastTranslatedText && lastOriginalText && text !== lastTranslatedText) {
-                mappingManager.rebuildMap(lastTranslatedText, lastOriginalText, text);
-            }
-            newText = await translateToOriginal(text, mappingManager, lastDictionary, updateProgress);
-            lastTranslatedText = null;
-
-            lastOriginalText = null;
-            currentDictionary = {};
-
-        }
-
-        await editor.edit((editBuilder: vscode.TextEditorEdit) => {
-            const fullRange = new vscode.Range(
-                editor.document.positionAt(0),
-                editor.document.positionAt(text.length)
-            );
-            editBuilder.replace(fullRange, newText);
-        });
-
-    });
-}
-
-export function getOriginalTerms(targetTerm: string): string[] 
-{
-    const terms = currentDictionary[targetTerm] || [];
-    log(`getOriginalTerms for '${targetTerm}': ${JSON.stringify(terms)}`);
-    return terms;
+    if (/^[a-z]/.test(source) && /^[A-Z]/.test(target)) {
+        return target.charAt(0).toLowerCase() + target.slice(1);
+    }
+    return target;
 }
 
 export async function translateToTarget(
@@ -108,14 +40,13 @@ export async function translateToTarget(
     dictionary: Dictionary,
     mappingManager: MappingManager,
     context: vscode.ExtensionContext,
-
     targetLanguage: string,
     updateProgress: () => void
 ): Promise<string> {
+    mappingManager.clearMap();
     const script = detectScript(text);
     const tokens = text.match(getTokenRegex(script)) || [];
     const translatedTokens: string[] = [];
-
     const dictPath = path.join(context.extensionPath, 'out', 'languages', 'languages', `${targetLanguage}.json`);
     let position = 0;
     let updated = false;
@@ -123,94 +54,100 @@ export async function translateToTarget(
     log(`Translating to '${targetLanguage}' (script: ${script})`);
     log(`Tokens: ${JSON.stringify(tokens)}`);
 
-    for (let i = 0; i < tokens.length; i++) 
-        {
+    for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
-        if (/[^\p{L}\p{M}\p{N}]+|\s+/u.test(token))
-             {
+        const tokenStartPosition = position;
+
+        if (/[^\p{L}\p{M}\p{N}]+|\s+/u.test(token)) {
             translatedTokens.push(token);
             position += token.length;
-            log(`Kept '${token}' at ${position - token.length} (punctuation)`);
+            log(`Kept '${token}' at ${tokenStartPosition} (punctuation)`);
             updateProgress();
             continue;
-
         }
 
         let translated = '';
-        const core = token;
+        const original = token;
         let foundFull = false;
 
-        for (const [dictTerm, enTerms] of Object.entries(dictionary))
-             {
-            if (enTerms.some(t => t.toLowerCase() === core.toLowerCase())) 
-                {
-                translated = dictTerm;
+        for (const [dictTerm, enTerms] of Object.entries(dictionary)) {
+            if (enTerms.some(t => t.toLowerCase() === original.toLowerCase())) {
+                translated = matchCase(original, dictTerm);
                 foundFull = true;
-                const originalCase = enTerms.find(t => t === core) || enTerms[0];
-                const identifier = mappingManager.addTerm(originalCase, translated, position);
-
-                log(`Translated '${core}' to '${translated}' at ${position}, mapped as '${identifier}'`);
+                const originalCase = enTerms.find(t => t === original) || enTerms[0];
+                const isTypeAnnotation = i > 0 && (tokens[i - 1].trim() === ':' || tokens[i - 1].trim() === '->');
+                const idBase = script === 'latin' ? translated.toLowerCase() : translated;
+                const textSoFar = translatedTokens.join('');
+                const escapedIdBase = idBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const occurrences = (textSoFar.match(new RegExp(escapedIdBase, 'gi')) || []).length;
+                const identifier = `${idBase}_${occurrences + 1}${isTypeAnnotation ? '_type' : ''}`;
+                mappingManager.addTerm(originalCase, translated, tokenStartPosition, identifier);
+                log(`Translated '${original}' to '${translated}' at ${tokenStartPosition}, mapped as '${identifier}'`);
+                if (translated.toLowerCase() === 'zeichenkette') {
+                    log(`DEBUG: Mapped zeichenkette: original='${originalCase}', translated='${translated}', id='${identifier}', prevToken='${i > 0 ? tokens[i - 1] : ''}', position=${tokenStartPosition}`);
+                }
                 break;
             }
-
         }
 
-        if (!foundFull) 
-            {
-            const parts = splitCompound(core);
+        if (!foundFull) {
+            const parts = splitCompound(original);
             if (parts.length > 1) {
                 const translatedParts: string[] = [];
                 const partIds: string[] = [];
-
-                let partPosition = position;
+                let partPosition = tokenStartPosition;
 
                 for (const part of parts) {
                     let partTarget = '';
                     for (const [dictTerm, enTerms] of Object.entries(dictionary)) {
                         if (enTerms.some(t => t.toLowerCase() === part.toLowerCase())) {
-                            partTarget = dictTerm;
+                            partTarget = matchCase(part, dictTerm);
                             if (!enTerms.includes(part)) {
                                 enTerms.push(part);
                                 updated = true;
-
                             }
                             break;
                         }
-
                     }
                     if (!partTarget) partTarget = part;
                     translatedParts.push(partTarget);
-                    const identifier = mappingManager.addTerm(part, partTarget, partPosition);
+                    const idBase = script === 'latin' ? partTarget.toLowerCase() : partTarget;
+                    const textSoFar = translatedTokens.join('') + translatedParts.slice(0, -1).join('');
+                    const escapedIdBase = idBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const occurrences = (textSoFar.match(new RegExp(escapedIdBase, 'gi')) || []).length;
+                    const identifier = `${idBase}_${occurrences + 1}`;
+                    mappingManager.addTerm(part, partTarget, partPosition, identifier);
                     partIds.push(identifier);
                     partPosition += part.length;
-
                 }
 
                 translated = translatedParts.join(script === 'devanagari' ? '' : '');
-                const compoundOriginal = parts.join('');
-                const compoundId = mappingManager.addCompound(compoundOriginal, translated, partIds, position);
-                log(`Mapped compound '${compoundId}' to '${compoundOriginal}' -> '${translated}' at ${position}`);
+                const compoundOriginal = original;
+                const compoundId = mappingManager.addCompound(compoundOriginal, translated, partIds, tokenStartPosition);
+                log(`Mapped compound '${compoundId}' to '${compoundOriginal}' -> '${translated}' at ${tokenStartPosition}`);
             } else {
-                translated = core;
-                const identifier = mappingManager.addTerm(core, core, position);
-                log(`Untranslated '${core}' kept as '${translated}' at ${position}, mapped as '${identifier}'`);
+                translated = original;
+                const idBase = script === 'latin' ? translated.toLowerCase() : translated;
+                const textSoFar = translatedTokens.join('');
+                const escapedIdBase = idBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const occurrences = (textSoFar.match(new RegExp(escapedIdBase, 'gi')) || []).length;
+                const identifier = `${idBase}_${occurrences + 1}`;
+                mappingManager.addTerm(original, translated, tokenStartPosition, identifier);
+                log(`Untranslated '${original}' kept as '${translated}' at ${tokenStartPosition}, mapped as '${identifier}'`);
             }
         }
 
         translatedTokens.push(translated);
         position += token.length;
         updateProgress();
-
     }
 
-    if (updated)
-       {
+    if (updated) {
         fs.writeFileSync(dictPath, JSON.stringify(dictionary, null, 2), 'utf8');
         log(`Updated dictionary with new variants`);
     }
 
     return translatedTokens.join('');
-
 }
 
 export async function translateToOriginal(
@@ -225,91 +162,153 @@ export async function translateToOriginal(
     const tokens = text.match(getTokenRegex(script)) || [];
     const translatedTokens: string[] = [];
     let position = 0;
+    const isLatin = script === 'latin';
 
     log(`Translating back: '${text}' with script '${script}'`);
     log(`Compounds: ${JSON.stringify(allCompounds)}`);
     log(`Terms: ${JSON.stringify(allTerms)}`);
 
-    for (let i = 0; i < tokens.length; i++) 
-        {
+    for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
-        if (/[^\p{L}\p{M}\p{N}]+|\s+/u.test(token) || PROTECTED_KEYWORDS.has(token)) {
+        const tokenStartPosition = position;
+
+        if (/[^\p{L}\p{M}\p{N}]+|\s+/u.test(token)) {
             translatedTokens.push(token);
             position += token.length;
-            log(`Kept '${token}' at ${position - token.length} (protected or punctuation)`);
+            log(`Kept '${token}' at ${tokenStartPosition} (punctuation)`);
             updateProgress();
             continue;
         }
 
         let translated = '';
-        const core = token;
+        const targetTerm = token;
 
-        const compoundId = mappingManager.getCompoundByTranslated(core);
+        // Check compound first
+        const compoundId = mappingManager.getCompoundByTranslated(targetTerm, script);
         if (compoundId && allCompounds[compoundId]) {
             translated = allCompounds[compoundId].original;
-            log(`Matched compound '${core}' to '${translated}' at ${position} via compoundId '${compoundId}'`);
+            log(`Matched compound '${targetTerm}' to '${translated}' at ${tokenStartPosition} via compoundId '${compoundId}'`);
             translatedTokens.push(translated);
-            position += core.length;
+            position += targetTerm.length;
             updateProgress();
             continue;
-
         }
 
-        const candidates = Object.entries(allTerms)
-            .filter(([id, orig]) => {
-                const trans = mappingManager.getTranslated(id);
-                const pos = mappingManager.getPosition(id);
-                return trans === core && Math.abs(pos - position) < core.length + 1;
-            })
-            .sort((a, b) => Math.abs(mappingManager.getPosition(a[0]) - position) - Math.abs(mappingManager.getPosition(b[0]) - position));
+        // Determine if this is a type annotation
+        let isTypeAnnotation = false;
+        if (i > 0) {
+            const prevText = text.substring(0, tokenStartPosition).slice(-10);
+            isTypeAnnotation = /:\s*$|->\s*$/.test(prevText);
+            log(`Type annotation check for '${targetTerm}' at ${tokenStartPosition}: isTypeAnnotation=${isTypeAnnotation}, prevToken='${i > 0 ? tokens[i - 1] : ''}', prevText='${prevText}'`);
+        }
 
-        if (candidates.length > 0) 
-            {
-            translated = candidates[0][1];
-            log(`Matched term '${core}' to '${translated}' at ${position} via proximity (identifier '${candidates[0][0]}')`);
+        // Use original text for occurrence counting
+        const idBase = isLatin ? targetTerm.toLowerCase() : targetTerm;
+        const textUpToPosition = text.substring(0, tokenStartPosition);
+        const escapedIdBase = idBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const occurrences = (textUpToPosition.match(new RegExp(escapedIdBase, 'gi')) || []).length;
+        const typeIdentifier = `${idBase}_${occurrences + 1}_type`;
+        const regularIdentifier = `${idBase}_${occurrences + 1}`;
+        let mappedOriginal = isTypeAnnotation ? allTerms[typeIdentifier] : allTerms[regularIdentifier];
+
+        if (mappedOriginal) {
+            translated = isLatin ? matchCase(targetTerm, mappedOriginal) : mappedOriginal;
+            log(`Matched term '${targetTerm}' to '${translated}' at ${tokenStartPosition} (identifier '${isTypeAnnotation ? typeIdentifier : regularIdentifier}')`);
         } else {
-            for (const [dictTerm, enTerms] of Object.entries(dictionary)) 
-                {
-                if (dictTerm.toLowerCase() === core.toLowerCase()) 
-                    {
-                    translated = enTerms[0];
-                    log(`Dictionary fallback '${core}' to '${translated}' at ${position}`);
-                    break;
+            // Secondary lookup: try the other identifier
+            mappedOriginal = isTypeAnnotation ? allTerms[regularIdentifier] : allTerms[typeIdentifier];
+            if (mappedOriginal) {
+                translated = isLatin ? matchCase(targetTerm, mappedOriginal) : mappedOriginal;
+                log(`Secondary match '${targetTerm}' to '${translated}' at ${tokenStartPosition} (identifier '${isTypeAnnotation ? regularIdentifier : typeIdentifier}')`);
+            } else {
+                // Fallback: check dictionary with type annotation preference
+                for (const [dictTerm, enTerms] of Object.entries(dictionary)) {
+                    if ((isLatin && dictTerm.toLowerCase() === targetTerm.toLowerCase()) || (!isLatin && dictTerm === targetTerm)) {
+                        if (targetTerm.toLowerCase() === 'zeichenkette' && isTypeAnnotation) {
+                            translated = isLatin ? matchCase(targetTerm, 'str') : 'str';
+                            log(`Type annotation fallback '${targetTerm}' to 'str' at ${tokenStartPosition}`);
+                        } else {
+                            const mappedTerm = Object.entries(allTerms).find(([id, orig]) => {
+                                const trans = mappingManager.getTranslated(id);
+                                return trans && (isLatin ? trans.toLowerCase() === dictTerm.toLowerCase() : trans === dictTerm);
+                            });
+                            if (mappedTerm) {
+                                translated = isLatin ? matchCase(targetTerm, mappedTerm[1]) : mappedTerm[1];
+                                log(`Dictionary fallback using mapped term '${targetTerm}' to '${translated}' at ${tokenStartPosition}`);
+                            } else {
+                                translated = isLatin ? matchCase(targetTerm, enTerms[0]) : enTerms[0];
+                                log(`Dictionary fallback default '${targetTerm}' to '${translated}' at ${tokenStartPosition}`);
+                            }
+                        }
+                        break;
+                    }
                 }
-
+                if (!translated) {
+                    translated = targetTerm;
+                    log(`No match for '${targetTerm}' at ${tokenStartPosition}, keeping as '${translated}'`);
+                }
             }
-            if (!translated)
-                 {
-                translated = core;
-                log(`No match for '${core}' at ${position}, keeping as '${translated}'`);
-
-            }
-
-
         }
 
         translatedTokens.push(translated);
-        position += token.length;
+        position += targetTerm.length;
         updateProgress();
     }
 
     return translatedTokens.join('');
-
-
 }
 
+export function getOriginalTerms(targetTerm: string): string[] {
+    const terms = currentDictionary[targetTerm] || [];
+    log(`getOriginalTerms for '${targetTerm}': ${JSON.stringify(terms)}`);
+    return terms;
+}
 
-/**
- * Split a compound word based on capital letters in latin script..
- */
+export async function toggleTranslation(
+    text: string,
+    language: string,
+    editor: vscode.TextEditor,
+    mappingManager: MappingManager,
+    context: vscode.ExtensionContext
+): Promise<void> {
+    const updateProgress = () => {};
+    if (language !== 'en') {
+        const dictionaryPath = path.join(context.extensionPath, 'out', 'languages', 'languages', `${language}.json`);
+        currentDictionary = JSON.parse(fs.readFileSync(dictionaryPath, 'utf8'));
+        lastDictionary = { ...currentDictionary };
+        lastLanguage = language;
+        log(`Loaded dictionary for ${language}`);
+    }
+
+    let newText: string;
+    if (language !== 'en') {
+        newText = await translateToTarget(text, currentDictionary, mappingManager, context, language, updateProgress);
+        lastTranslatedText = newText;
+        lastOriginalText = text;
+    } else {
+        if (lastTranslatedText && lastOriginalText && text !== lastTranslatedText) {
+            mappingManager.rebuildMap(lastTranslatedText, lastOriginalText, text);
+        }
+        newText = await translateToOriginal(text, mappingManager, lastDictionary, updateProgress);
+        lastTranslatedText = null;
+        lastOriginalText = null;
+        currentDictionary = {};
+    }
+
+    await editor.edit((editBuilder: vscode.TextEditorEdit) => {
+        const fullRange = new vscode.Range(
+            editor.document.positionAt(0),
+            editor.document.positionAt(text.length)
+        );
+        editBuilder.replace(fullRange, newText);
+    });
+}
+
 export function splitCompound(term: string): string[] {
     const parts = term.match(/[A-Z][a-z]*|[a-z]+/g) || [term];
     return parts.filter(Boolean);
 }
 
-/**
- * Splits a compound word based on script transitions and dictionary terms for non Latin languages..
- */
 export function splitNonLatinCompound(term: string): string[] {
     const parts: string[] = [];
     let currentPart = '';
@@ -332,7 +331,7 @@ export function splitNonLatinCompound(term: string): string[] {
             } else if (lastScript === 'cyrillic') {
                 parts.push(...segmentCyrillic(currentPart));
             } else if (lastScript === 'latin') {
-                parts.push(...splitCompound(currentPart)); // Use splitCompound for Latin with diacritics
+                parts.push(...splitCompound(currentPart));
             }
             currentPart = char;
             lastScript = currentScript;
@@ -341,7 +340,6 @@ export function splitNonLatinCompound(term: string): string[] {
         }
     }
 
-    // Handle the last part
     if (currentPart) {
         if (lastScript === 'logographic') {
             parts.push(...segmentLogographic(currentPart));
@@ -357,20 +355,58 @@ export function splitNonLatinCompound(term: string): string[] {
     return parts.filter(Boolean);
 }
 
-function segmentLogographic(text: string): string[] {
+function segmentLogographic(text: string): string[] 
+{
     const segments: string[] = [];
     let pos = 0;
 
-    while (pos < text.length) {
+    while (pos < text.length) 
+        {
         let longestMatch = '';
-        for (let len = Math.min(text.length - pos, 4); len > 0; len--) { // Max 4 chars for Chinese
+        for (let len = Math.min(text.length - pos, 4); len > 0; len--) 
+            {
             const substring = text.substring(pos, pos + len);
-            if (currentDictionary[substring]) {
+            if (currentDictionary[substring]) 
+                {
                 longestMatch = substring;
                 break;
             }
         }
-        if (longestMatch) {
+        if (longestMatch) 
+            {
+            segments.push(longestMatch);
+            pos += longestMatch.length;
+        } else 
+        {
+            segments.push(text[pos]);
+            pos++;
+        }
+
+    }
+
+    return segments;
+}
+
+function segmentDevanagari(text: string): string[] 
+{
+    const segments: string[] = [];
+    let pos = 0;
+
+    while (pos < text.length) 
+        {
+        let longestMatch = '';
+        for (let len = text.length - pos; len > 0; len--) 
+            {
+            const substring = text.substring(pos, pos + len);
+            if (currentDictionary[substring]) {
+                longestMatch = substring;
+
+                break;
+
+            }
+        }
+        if (longestMatch) 
+            {
             segments.push(longestMatch);
             pos += longestMatch.length;
         } else {
@@ -382,52 +418,31 @@ function segmentLogographic(text: string): string[] {
     return segments;
 }
 
-function segmentDevanagari(text: string): string[] {
+function segmentCyrillic(text: string): string[] 
+{
     const segments: string[] = [];
     let pos = 0;
 
     while (pos < text.length) {
         let longestMatch = '';
-        for (let len = text.length - pos; len > 0; len--) {
+        for (let len = text.length - pos; len > 0; len--) 
+            {
             const substring = text.substring(pos, pos + len);
-            if (currentDictionary[substring]) {
+            if (currentDictionary[substring]) 
+                {
                 longestMatch = substring;
                 break;
             }
         }
-        if (longestMatch) {
+        if (longestMatch) 
+            {
             segments.push(longestMatch);
             pos += longestMatch.length;
         } else {
             segments.push(text[pos]);
             pos++;
         }
-    }
 
-    return segments;
-}
-
-
-function segmentCyrillic(text: string): string[] {
-    const segments: string[] = [];
-    let pos = 0;
-
-    while (pos < text.length) {
-        let longestMatch = '';
-        for (let len = text.length - pos; len > 0; len--) {
-            const substring = text.substring(pos, pos + len);
-            if (currentDictionary[substring]) {
-                longestMatch = substring;
-                break;
-            }
-        }
-        if (longestMatch) {
-            segments.push(longestMatch);
-            pos += longestMatch.length;
-        } else {
-            segments.push(text[pos]);
-            pos++;
-        }
     }
 
     return segments;

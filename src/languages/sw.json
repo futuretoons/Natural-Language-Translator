@@ -95,7 +95,7 @@
     "skala":["scale"],"relation":["rel"],"länk":["href","url"],
     "avkastning":["yield"],"kräv":["require"],"icke-lokal":["nonlocal"],
     "använda":["using"],"specialisera":["specialize"],"mall":["template"],"definiera":["define"],"deklarera":["declare"],
-    "implementera":["implement"],"vänta på":["await"],"exportera":["export"],"modul":["module"],"paket":["package"],
+    "implementera":["implement"],"väntapå":["await"],"exportera":["export"],"modul":["module"],"paket":["package"],
     "kompilera":["compile"],"utöka":["extend"],"statisk":["static"],"typ":["type"],"reflektera":["reflect"],
     "asynkron":["async"],"uppskjuta":["defer"],"återanrop":["callback"],"detektera":["detect"],"styra":["drive"],
     "par":["tuple"],"struktur":["struct"],

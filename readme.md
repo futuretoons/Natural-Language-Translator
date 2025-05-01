@@ -1,6 +1,12 @@
 # Natural Language Translator 
 
-A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers, writers, and language enthusiasts working with multilingual code or content.
+A powerful Visual Studio Code extension that enables real-time translation of text in your editor between English and various target languages. It supports dictionary management, compound word detection, and hover-over translations, making it ideal for developers, writers, and language enthusiasts working with multi-lingual computer programs or other content..
+
+## INCLUDED LANGUAGE DICTIONARIES: 
+  German(Deutsch), Spanish(español), French(français), Italian(italiano), Swedish(svenska), Romanian(română), Ukrainian(україн), Turkish(Türkçe), Dutch(Nederlands), Portuguese(português), Polish(polski), Russian(русский), Mandarin Chinese(中文), Hindi(हिन्दी)
+  
+## SUPPORTED NATURAL LANGUAGE SCRIPTS:
+  Latin, Cyrillic, Chinese & Devanegari
 
 ## Features
 
@@ -14,7 +20,7 @@ A powerful Visual Studio Code extension that enables real-time translation of te
 
 ## Installation
 
-1. Install the extension from the [Visual Studio Code Marketplace](#).
+1. Install the extension from the [Visual Studio Code Marketplace](#)(Search Natural Language Translator).
 2. Reload VSCode after installation.
 
 ## Usage
@@ -44,3 +50,8 @@ A powerful Visual Studio Code extension that enables real-time translation of te
      "targetTerm": ["englishMeaning1", "englishMeaning2"],
      "anotherTerm": ["meaning"]
    }
+   
+##WORK IN PROGRESS
+--Currently working on adding support for other scripts such as Korean, Bengali, Japanese, ect.. 
+-- Adding intellisense integration to allow for much better UX. 
+--Developed by Liam Earley @2025--
