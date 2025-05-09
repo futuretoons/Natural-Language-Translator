@@ -8,6 +8,12 @@ A powerful Visual Studio Code extension that enables real-time translation of te
 ## SUPPORTED NATURAL LANGUAGE SCRIPTS:
   Latin, Cyrillic, Chinese & Devanegari
 
+## INCLUDED LANGUAGES (dictionaries): 
+  German, Spanish, French, Italian, Hindi, Vietnamese, Swedish, Romanian, Turkish, Dutch, Portuguese, Polish, Russian & Mandarin Chinese
+  
+## SUPPORTED NATURAL SCRIPTS:
+    Latin, Cyrillic (only russian at the moment), Devanegari & Chinese. 
+
 ## Features
 
 - **Toggle Translation**:  Switch between English and a target language with a single command.
@@ -51,7 +57,11 @@ A powerful Visual Studio Code extension that enables real-time translation of te
      "anotherTerm": ["meaning"]
    }
    
+<<<<<<< HEAD
 ##WORK IN PROGRESS
 --Currently working on adding support for other scripts such as Korean, Bengali, Japanese, ect.. 
 -- Adding intellisense integration to allow for much better UX. 
 --Developed by Liam Earley @2025--
+=======
+## WORK IN PROGRESS: Japanese, Korean, Bengali & adding support for all Cyrillic languages..
+>>>>>>> 539aa2f46e320c5407294a7913fc52e7f19afa64
