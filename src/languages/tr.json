@@ -11,7 +11,7 @@
     
     "çıkış":["output"],"dal":["branch"],"birleştir":["merge"],"kilit":["mutex"],"erken":["early"],
     "aktar":["pass"],"gizle":["hide"],"bağla":["link"],"algıla":["detect"],"kullanıcı":["user","usr"],
-    "çekirdek":["kernel","core"],"sürücü":["drive","driver"],"tam sayı":["int","integer"],"ondalık":["float","flt"],"dize":["string","str"],
+    "çekirdek":["kernel","core"],"sürücü":["drive","driver"],"tamsayı":["int","integer"],"ondalık":["float","flt"],"dize":["string","str"],
     "mantıksal":["boolean","bool"],"boş":["void"],"kısa":["short","srt"],"uzun":["long","lng"],"işaretsiz":["unsigned"],
     "dizi":["array","arr"],"sözlük":["dict"],"demet":["tuple"],"numaralandırma":["enum"],
     "işaretçi":["pointer","ptr"],"vektör":["vector"],"skaler":["scalar"],"kapsam":["range","scope"],"kuyruk":["queue"],
@@ -69,10 +69,10 @@
     "son":["final"],"soyut":["abstract"],"saltokunur":["readonly"],"yazılabilir":["writable"],
     "saf":["pure"],"yerel":["local"],"mühürlü":["seal"],"değişken":["mutable"],"iç":["internal"],
     "açık":["explicit"],"örtük":["implicit"],"boşolabilir":["nullable"],"boşolamaz":["nonnull"],"salt yaz":["writeonly"],
-    "üye":["member"],"özellik":["property"],"paketle":["pack"],"güvenlik":["safety"],"yeniden giriş":["reentrant"],
+    "üye":["member"],"özellik":["property"],"paketle":["pack"],"güvenlik":["safety"],"yenidengiriş":["reentrant"],
     "istek":["request"],"yanıt":["response"],"oturum":["session"],"çevre":["environment"],"performans":["performance"],
     "darboğaz":["bottleneck"],"yük":["load"],"verim":["throughput","thru"],"bantgenişliği":["bandwidth"],"yönet":["manage"],
-    "planla":["schedule"],"zamanlayıcı":["timer"],"uyarı":["warning"],"kullanım durumu":["case"],
+    "planla":["schedule"],"zamanlayıcı":["timer"],"uyarı":["warning"],"kullanımdurumu":["case"],
     "bağımlılık":["dependency"],"sabitdisk":["disk"],"sayfa":["page"],"fiziksel":["physical"],"kesinti":["interrupt"],
     
     "işleme":["handle"],"sızıntı":["leak"],"açgözlü":["greedy"],"geritakip":["backtrack"],"matematik":["math"],

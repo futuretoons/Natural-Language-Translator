@@ -5,13 +5,18 @@ import { detectScript, getTokenRegex } from './translation';
 export class MappingManager {
     private context: vscode.ExtensionContext;
     private compoundCounter: number;
+    private isRebuilding: boolean = false; // Guard against concurrent rebuilds
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
-        this.compoundCounter = this.context.workspaceState.get('compoundCounter', 0);
+        this.compoundCounter = this.context.workspaceState.get('compoundCounter', 0) as number;
     }
 
     addTerm(originalTerm: string, translatedTerm: string, position: number, identifier: string): string {
+        if (typeof position !== 'number') {
+            log(`ERROR: Invalid position type for '${identifier}': ${typeof position}, value=${position}`);
+            position = 0; // Fallback to 0
+        }
         this.context.workspaceState.update(`original_${identifier}`, originalTerm);
         this.context.workspaceState.update(`translated_${identifier}`, translatedTerm);
         this.context.workspaceState.update(`position_${identifier}`, position);
@@ -21,6 +26,10 @@ export class MappingManager {
     }
 
     addInsertionPictographic(originalTerm: string, translatedTerm: string, position: number, currentText: string): string {
+        if (typeof position !== 'number') {
+            log(`ERROR: Invalid position type for '${translatedTerm.toLowerCase()}_${position}': ${typeof position}, value=${position}`);
+            position = 0; // Fallback to 0
+        }
         const identifier = `${translatedTerm.toLowerCase()}_${position}`;
         log(`Adding insertion: '${translatedTerm}' -> '${originalTerm}' at position ${position}, identifier='${identifier}'`);
 
@@ -32,6 +41,10 @@ export class MappingManager {
     }
 
     addCompound(originalCompound: string, translatedCompound: string, partIds: string[], position: number): string {
+        if (typeof position !== 'number') {
+            log(`ERROR: Invalid position type for compound '${translatedCompound}': ${typeof position}, value=${position}`);
+            position = 0; // Fallback to 0
+        }
         this.compoundCounter++;
         const compoundId = `compound_${this.compoundCounter}`;
         this.context.workspaceState.update(`compound_${compoundId}_original`, originalCompound);
@@ -42,7 +55,7 @@ export class MappingManager {
         this.context.workspaceState.update('compoundCounter', this.compoundCounter);
 
         for (const partId of partIds) {
-            const currentCompoundIds = this.context.workspaceState.get(`compoundIds_${partId}`) as string[] || [];
+            const currentCompoundIds = (this.context.workspaceState.get(`compoundIds_${partId}`) as string[] | undefined) || [];
             if (!currentCompoundIds.includes(compoundId)) {
                 currentCompoundIds.push(compoundId);
                 this.context.workspaceState.update(`compoundIds_${partId}`, currentCompoundIds);
@@ -59,7 +72,7 @@ export class MappingManager {
         const allCompounds = this.getAllCompounds();
         const [coreTerm] = identifier.split('_');
 
-        const compoundIds = this.context.workspaceState.get(`compoundIds_${identifier}`) as string[] || [];
+        const compoundIds = (this.context.workspaceState.get(`compoundIds_${identifier}`) as string[] | undefined) || [];
         for (const compoundId of compoundIds) {
             const compound = allCompounds[compoundId];
             if (compound) {
@@ -90,7 +103,7 @@ export class MappingManager {
         if (!compound) return;
 
         for (const partId of compound.parts) {
-            const compoundIds = this.context.workspaceState.get(`compoundIds_${partId}`) as string[] || [];
+            const compoundIds = (this.context.workspaceState.get(`compoundIds_${partId}`) as string[] | undefined) || [];
             const updatedCompoundIds = compoundIds.filter(id => id !== compoundId);
             this.context.workspaceState.update(`compoundIds_${partId}`, updatedCompoundIds);
             log(`Removed compound '${compoundId}' reference from part '${partId}'`);
@@ -114,7 +127,7 @@ export class MappingManager {
         const terms: { [key: string]: string } = {};
         for (const key of termKeys) {
             const identifier = key.replace('original_', '');
-            const original = this.context.workspaceState.get(key) as string;
+            const original = this.context.workspaceState.get(key) as string | undefined;
             if (original) terms[identifier] = original;
         }
         return terms;
@@ -126,13 +139,18 @@ export class MappingManager {
         const compounds: { [key: string]: { original: string; translated: string; parts: string[]; position: number } } = {};
         for (const key of compoundKeys) {
             const id = key.replace('compound_', '').replace('_original', '');
-            const original = this.context.workspaceState.get(`compound_${id}_original`) as string;
+            const original = this.context.workspaceState.get(`compound_${id}_original`) as string | undefined;
             if (original) {
+                const position = this.context.workspaceState.get(`compound_${id}_position`);
+                if (typeof position !== 'number') {
+                    log(`ERROR: Invalid position type for compound_${id}: ${typeof position}, value=${position}`);
+                    continue; // Skip invalid compounds
+                }
                 compounds[id] = {
                     original,
                     translated: this.context.workspaceState.get(`compound_${id}_translated`) as string,
-                    parts: this.context.workspaceState.get(`compound_${id}_parts`) as string[],
-                    position: this.context.workspaceState.get(`compound_${id}_position`) as number,
+                    parts: (this.context.workspaceState.get(`compound_${id}_parts`) as string[] | undefined) || [],
+                    position,
                 };
             }
         }
@@ -140,11 +158,21 @@ export class MappingManager {
     }
 
     getPosition(identifier: string): number {
-        return this.context.workspaceState.get(`position_${identifier}`, 0) as number;
+        const position = this.context.workspaceState.get(`position_${identifier}`, 0);
+        if (typeof position !== 'number') {
+            log(`ERROR: Invalid position type for '${identifier}': ${typeof position}, value=${position}`);
+            return 0; // Fallback to 0
+        }
+        return position as number;
     }
 
     getCompoundIds(identifier: string): string[] {
-        return this.context.workspaceState.get(`compoundIds_${identifier}`, []) as string[];
+        const compoundIds = this.context.workspaceState.get(`compoundIds_${identifier}`, []);
+        if (!Array.isArray(compoundIds)) {
+            log(`ERROR: Invalid compoundIds type for '${identifier}': ${typeof compoundIds}, value=${compoundIds}`);
+            return [];
+        }
+        return compoundIds as string[];
     }
 
     getCompoundByTranslated(translated: string, script: string): string | undefined {
@@ -177,6 +205,12 @@ export class MappingManager {
     }
 
     rebuildMap(lastTranslated: string, original: string, current: string): void {
+        if (this.isRebuilding) {
+            log('Skipping rebuildMap: Another rebuild is in progress');
+            return;
+        }
+        this.isRebuilding = true;
+
         const script = detectScript(lastTranslated);
         const lastTokens = lastTranslated.match(getTokenRegex(script)) || [];
         const currTokens = current.match(getTokenRegex(script)) || [];
@@ -189,23 +223,52 @@ export class MappingManager {
         const assignPositions = (tokens: string[], positions: { [token: string]: number[] }, label: string) => {
             let pos = 0;
             for (const token of tokens) {
-                if (!(token in positions)) {
-                    positions[token] = [];
+                if (!token || typeof token !== 'string') {
+                    log(`Skipping invalid token in ${label}: ${JSON.stringify(token)}`);
+                    pos += 1; // Increment to avoid infinite loop
+                    continue;
                 }
-                positions[token].push(pos);
-                log(`${label} token: '${token}' at ${pos}`);
+                if (!positions[token] || !Array.isArray(positions[token])) {
+                    positions[token] = [];
+                    log(`Initialized positions array for '${token}' (${label})`);
+                }
+                log(`Before push: positions['${token}'] type=${typeof positions[token]}, value=${JSON.stringify(positions[token])}`);
+                try {
+                    positions[token].push(pos);
+                    log(`${label} token: '${token}' at ${pos}`);
+                } catch (error) {
+                    log(`Error pushing position for '${token}' (${label}): ${error}`);
+                    positions[token] = []; // Reset to avoid further errors
+                }
                 pos += token.length;
             }
         };
 
-        assignPositions(lastTokens, lastPositions, 'Last');
-        assignPositions(currTokens, currPositions, 'Current');
-        assignPositions(origTokens, origPositions, 'Original');
+        try {
+            log('Starting assignPositions for Last tokens');
+            assignPositions(lastTokens, lastPositions, 'Last');
+            log('Starting assignPositions for Current tokens');
+            assignPositions(currTokens, currPositions, 'Current');
+            log('Starting assignPositions for Original tokens');
+            assignPositions(origTokens, origPositions, 'Original');
+        } catch (error) {
+            log(`Error in assignPositions: ${error}`);
+            this.isRebuilding = false;
+            return;
+        }
 
         const allTerms = this.getAllTerms();
         const allCompounds = this.getAllCompounds();
         const newTerms: { [key: string]: { original: string; translated: string; position: number; compoundIds: string[] } } = {};
         const newCompounds: { [key: string]: { original: string; translated: string; parts: string[]; position: number } } = {};
+
+        // Log workspace state for debugging
+        const positionKeys = this.context.workspaceState.keys().filter(key => key.startsWith('position_'));
+        log(`Position keys in workspaceState: ${JSON.stringify(positionKeys)}`);
+        for (const key of positionKeys) {
+            const value = this.context.workspaceState.get(key);
+            log(`Workspace state ${key}: type=${typeof value}, value=${JSON.stringify(value)}`);
+        }
 
         for (const [id, compound] of Object.entries(allCompounds)) {
             const translated = compound.translated;
@@ -220,13 +283,17 @@ export class MappingManager {
         }
 
         for (const [id, original] of Object.entries(allTerms)) {
-            const translated = this.context.workspaceState.get(`translated_${id}`) as string;
+            const translated = this.context.workspaceState.get(`translated_${id}`) as string | undefined;
+            if (!translated) {
+                log(`Skipping term: ${id} -> ${original} (no translated term found)`);
+                continue;
+            }
             const position = this.getPosition(id);
             const compoundIds = this.getCompoundIds(id);
             const currPosList = currPositions[translated] || [];
             const lastPosList = lastPositions[translated] || [];
 
-            const isPartOfCompound = compoundIds.some(cid => newCompounds[cid]);
+            const isPartOfCompound = compoundIds.some(cid => newCompounds[cid] !== undefined);
             if (isPartOfCompound && !currPosList.includes(position)) {
                 log(`Skipped term: ${id} -> ${original} (part of compound, not standalone at ${position})`);
                 continue;
@@ -258,6 +325,7 @@ export class MappingManager {
 
         this.context.workspaceState.update('compoundCounter', this.compoundCounter);
         log(`Map rebuilt: Terms=${Object.keys(newTerms).length}, Compounds=${Object.keys(newCompounds).length}`);
+        this.isRebuilding = false;
     }
 
     private generateIdentifier(term: string): string {
@@ -265,7 +333,7 @@ export class MappingManager {
         let counter = 0;
         for (const key of Object.keys(allTerms)) {
             if (key.startsWith(term)) {
-                const num = parseInt(key.split('_')[1]);
+                const num = parseInt(key.split('_')[1] || '0', 10);
                 if (num > counter) counter = num;
             }
         }
