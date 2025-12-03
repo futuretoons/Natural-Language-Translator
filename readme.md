@@ -1,6 +1,6 @@
-# Natural Language Translator 
+# Natural Language Translator (Visual Studio Code Extension)
 
-Translate code documents into other natural languages(es,fr,zh,ru,ect..).
+Translate documents (in VS code) into other natural languages(es,fr,zh,ru,ect..).
 Select a variety of local dictionaries to translate documents word by word. 
 With a simple keybind(command) your document goes back to english! 
 
