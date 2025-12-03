@@ -79,6 +79,8 @@ fix bugs when editing in other languages and expanding support for all scripts.
 
 This project is open source research project and i would be happy to accept help from anyone intested in improving this tool to make programming more versitile. 
 
+#How to Build / Compile
+use "npm run build" to compile the TS files and copy the language json files to the runtime location. 
 
 Also leave a review on the VSCODE marketplace, Github,
  or send me an Email at 'Business.liamearley@gmail.com'
